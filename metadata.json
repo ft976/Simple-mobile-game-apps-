@@ -1,0 +1,6 @@
+{
+  "name": "2048",
+  "description": "A sleek, modern 2048 sliding puzzle game with beautiful animations, persistent high scores, and quick session saving.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

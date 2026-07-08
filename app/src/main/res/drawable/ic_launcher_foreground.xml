@@ -3,7 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/logo_tile_1783499696981"
+        android:drawable="@drawable/arcade_lounge_icon_1783522487871"
         android:gravity="center" />
 </layer-list>
-

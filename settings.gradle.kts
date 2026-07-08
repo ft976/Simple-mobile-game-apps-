@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "2048"
+rootProject.name = "Arcade Lounge"
 
 include(":app")

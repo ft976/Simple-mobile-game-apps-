@@ -20,6 +20,9 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -80,6 +83,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import com.example.ui.GameViewModel
 import com.example.ui.SwipeDirection
 import com.example.ui.theme.MyApplicationTheme
@@ -278,26 +282,50 @@ fun GameScreen(
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
                 ) {
-                    Column(
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .padding(10.dp)
                     ) {
-                        for (r in 0..3) {
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                for (c in 0..3) {
-                                    val value = uiState.grid[r][c]
-                                    GameCell(
-                                        value = value,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("cell_${r}_${c}")
+                        // 1. Static empty grid background
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            for (r in 0..3) {
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    for (c in 0..3) {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .aspectRatio(1f)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(Color(0xFF463E45)) // empty cell color
+                                                .testTag("cell_${r}_${c}")
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2. Dynamic animated tiles on top
+                        BoxWithConstraints(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            val gap = 10.dp
+                            val cellSize = (maxWidth - gap * 3) / 4
+
+                            uiState.tiles.forEach { tile ->
+                                key(tile.id) {
+                                    AnimatedTile(
+                                        tile = tile,
+                                        cellSize = cellSize,
+                                        gap = gap
                                     )
                                 }
                             }
@@ -407,6 +435,126 @@ fun ScoreBadge(
                 color = Color(0xFFEFE6E2)
             )
         }
+    }
+}
+
+@Composable
+fun AnimatedTile(
+    tile: com.example.ui.Tile,
+    cellSize: androidx.compose.ui.unit.Dp,
+    gap: androidx.compose.ui.unit.Dp
+) {
+    val xTarget = (cellSize + gap) * tile.col
+    val yTarget = (cellSize + gap) * tile.row
+
+    // Animate coordinates smoothly and extremely snappily (high stiffness)
+    val animatedX by androidx.compose.animation.core.animateDpAsState(
+        targetValue = xTarget,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = 3200f // Highly responsive and super fast sliding
+        ),
+        label = "TileX_${tile.id}"
+    )
+
+    val animatedY by androidx.compose.animation.core.animateDpAsState(
+        targetValue = yTarget,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = 3200f // Highly responsive and super fast sliding
+        ),
+        label = "TileY_${tile.id}"
+    )
+
+    // Using Animatable for precise control over spawn/merge animations
+    val scaleAnim = remember { androidx.compose.animation.core.Animatable(if (tile.isNew) 0f else 1f) }
+    val alphaAnim = remember { androidx.compose.animation.core.Animatable(if (tile.isNew) 0f else 1f) }
+
+    LaunchedEffect(tile.id, tile.isNew, tile.isMerged, tile.toRemove) {
+        if (tile.toRemove) {
+            // Smooth fade out and shrink for merged away tiles
+            launch {
+                scaleAnim.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(stiffness = 3200f)
+                )
+            }
+            launch {
+                alphaAnim.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(stiffness = 3200f)
+                )
+            }
+        } else if (tile.isMerged) {
+            // Juicy spring pop animation for successfully merged tiles
+            scaleAnim.animateTo(
+                targetValue = 1.22f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = 3800f
+                )
+            )
+            scaleAnim.animateTo(
+                targetValue = 1.0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = 3200f
+                )
+            )
+        } else if (tile.isNew) {
+            // Beautiful bounce-in spawn animation for new tiles
+            scaleAnim.animateTo(
+                targetValue = 1.0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = 3200f
+                )
+            )
+            alphaAnim.animateTo(
+                targetValue = 1.0f,
+                animationSpec = spring(stiffness = 3200f)
+            )
+        } else {
+            // Keep at base state
+            launch { scaleAnim.animateTo(1f) }
+            launch { alphaAnim.animateTo(1f) }
+        }
+    }
+
+    val (backgroundColor, textColor) = getTileColors(tile.value)
+
+    Box(
+        modifier = Modifier
+            .size(cellSize)
+            .graphicsLayer {
+                translationX = animatedX.toPx()
+                translationY = animatedY.toPx()
+                scaleX = scaleAnim.value
+                scaleY = scaleAnim.value
+                alpha = alphaAnim.value
+            }
+            .clip(RoundedCornerShape(12.dp))
+            .background(backgroundColor)
+            .border(
+                width = if (tile.value == 2048) 2.dp else 0.dp,
+                color = if (tile.value == 2048) Color(0xFFE8B4B8) else Color.Transparent,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .testTag("tile_${tile.row}_${tile.col}"),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = tile.value.toString(),
+            fontSize = when {
+                tile.value >= 1000 -> 20.sp
+                tile.value >= 100 -> 24.sp
+                else -> 28.sp
+            },
+            fontWeight = FontWeight.Bold,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+            color = textColor,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
@@ -563,6 +711,7 @@ fun SwipeableBox(
 ) {
     var totalDragX by remember { mutableStateOf(0f) }
     var totalDragY by remember { mutableStateOf(0f) }
+    var hasSwipedInCurrentGesture by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -571,23 +720,33 @@ fun SwipeableBox(
                     onDragStart = {
                         totalDragX = 0f
                         totalDragY = 0f
+                        hasSwipedInCurrentGesture = false
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        totalDragX += dragAmount.x
-                        totalDragY += dragAmount.y
-                    },
-                    onDragEnd = {
-                        val absX = kotlin.math.abs(totalDragX)
-                        val absY = kotlin.math.abs(totalDragY)
-                        val threshold = 70f // highly sensitive swipe activation
-                        if (absX > threshold || absY > threshold) {
-                            if (absX > absY) {
-                                if (totalDragX > 0) onSwipeRight() else onSwipeLeft()
-                            } else {
-                                if (totalDragY > 0) onSwipeDown() else onSwipeUp()
+                        if (!hasSwipedInCurrentGesture) {
+                            totalDragX += dragAmount.x
+                            totalDragY += dragAmount.y
+
+                            val absX = kotlin.math.abs(totalDragX)
+                            val absY = kotlin.math.abs(totalDragY)
+                            val threshold = 55f // highly responsive activation threshold
+
+                            if (absX > threshold || absY > threshold) {
+                                hasSwipedInCurrentGesture = true // lock swipe until next touch down
+                                if (absX > absY) {
+                                    if (totalDragX > 0) onSwipeRight() else onSwipeLeft()
+                                } else {
+                                    if (totalDragY > 0) onSwipeDown() else onSwipeUp()
+                                }
                             }
                         }
+                    },
+                    onDragEnd = {
+                        hasSwipedInCurrentGesture = false
+                    },
+                    onDragCancel = {
+                        hasSwipedInCurrentGesture = false
                     }
                 )
             },

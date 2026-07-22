@@ -265,19 +265,25 @@ fun GameScreen(
 
                     // Score Badges Row
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         ScoreBadge(
                             label = "Score",
                             value = uiState.score,
                             icon = Icons.Default.Star,
-                            iconColor = androidx.compose.material3.MaterialTheme.colorScheme.primary // Dusty rose accent
+                            iconColor = androidx.compose.material3.MaterialTheme.colorScheme.primary
                         )
                         ScoreBadge(
                             label = "Best",
                             value = uiState.highScore,
                             icon = Icons.Default.EmojiEvents,
-                            iconColor = androidx.compose.material3.MaterialTheme.colorScheme.tertiary // Gold accent
+                            iconColor = androidx.compose.material3.MaterialTheme.colorScheme.tertiary
+                        )
+                        ScoreBadge(
+                            label = "Moves",
+                            value = uiState.moveCount,
+                            icon = Icons.Default.Widgets,
+                            iconColor = androidx.compose.material3.MaterialTheme.colorScheme.secondary
                         )
                     }
                 }
@@ -360,10 +366,10 @@ fun GameScreen(
                     .onKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
                             when (event.key) {
-                                Key.DirectionLeft -> { viewModel.move(SwipeDirection.LEFT); true }
-                                Key.DirectionRight -> { viewModel.move(SwipeDirection.RIGHT); true }
-                                Key.DirectionUp -> { viewModel.move(SwipeDirection.UP); true }
-                                Key.DirectionDown -> { viewModel.move(SwipeDirection.DOWN); true }
+                                Key.DirectionLeft, Key.A, Key.H -> { viewModel.move(SwipeDirection.LEFT); true }
+                                Key.DirectionRight, Key.D, Key.L -> { viewModel.move(SwipeDirection.RIGHT); true }
+                                Key.DirectionUp, Key.W, Key.K -> { viewModel.move(SwipeDirection.UP); true }
+                                Key.DirectionDown, Key.S, Key.J -> { viewModel.move(SwipeDirection.DOWN); true }
                                 else -> false
                             }
                         } else false
@@ -423,7 +429,8 @@ fun GameScreen(
                                     AnimatedTile(
                                         tile = tile,
                                         cellSize = cellSize,
-                                        gap = gap
+                                        gap = gap,
+                                        isDarkTheme = isDarkTheme
                                     )
                                 }
                             }
@@ -479,7 +486,7 @@ fun GameScreen(
 
             // Rules / Tips Footer Description
             Text(
-                text = "Swipe or use arrow keys to move tiles",
+                text = "Swipe or use arrow/WASD keys to move tiles",
                 fontSize = 12.sp,
                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -501,11 +508,11 @@ fun ScoreBadge(
     Card(
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(
-            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant // Warm board color
+            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
@@ -529,7 +536,7 @@ fun ScoreBadge(
             }
             Text(
                 text = value.toString(),
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                 fontWeight = FontWeight.Bold,
                 color = androidx.compose.material3.MaterialTheme.colorScheme.onBackground
@@ -542,17 +549,18 @@ fun ScoreBadge(
 fun AnimatedTile(
     tile: com.example.ui.Tile,
     cellSize: androidx.compose.ui.unit.Dp,
-    gap: androidx.compose.ui.unit.Dp
+    gap: androidx.compose.ui.unit.Dp,
+    isDarkTheme: Boolean = false
 ) {
     val xTarget = (cellSize + gap) * tile.col
     val yTarget = (cellSize + gap) * tile.row
 
-    // Animate coordinates smoothly and extremely snappily (high stiffness)
+    // Animate coordinates smoothly and fast
     val animatedX by androidx.compose.animation.core.animateDpAsState(
         targetValue = xTarget,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = 3200f // Highly responsive and super fast sliding
+            dampingRatio = 0.85f,
+            stiffness = 2800f
         ),
         label = "TileX_${tile.id}"
     )
@@ -560,19 +568,17 @@ fun AnimatedTile(
     val animatedY by androidx.compose.animation.core.animateDpAsState(
         targetValue = yTarget,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = 3200f // Highly responsive and super fast sliding
+            dampingRatio = 0.85f,
+            stiffness = 2800f
         ),
         label = "TileY_${tile.id}"
     )
 
-    // Using Animatable for precise control over spawn/merge animations
     val scaleAnim = remember { androidx.compose.animation.core.Animatable(if (tile.isNew) 0f else 1f) }
     val alphaAnim = remember { androidx.compose.animation.core.Animatable(if (tile.isNew) 0f else 1f) }
 
     LaunchedEffect(tile.id, tile.isNew, tile.isMerged, tile.toRemove) {
         if (tile.toRemove) {
-            // Smooth fade out and shrink for merged away tiles
             launch {
                 scaleAnim.animateTo(
                     targetValue = 0f,
@@ -586,42 +592,39 @@ fun AnimatedTile(
                 )
             }
         } else if (tile.isMerged) {
-            // Juicy spring pop animation for successfully merged tiles
             scaleAnim.animateTo(
-                targetValue = 1.22f,
+                targetValue = 1.2f,
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = 3800f
+                    stiffness = 3600f
                 )
             )
             scaleAnim.animateTo(
                 targetValue = 1.0f,
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = 3200f
+                    stiffness = 2800f
                 )
             )
         } else if (tile.isNew) {
-            // Beautiful bounce-in spawn animation for new tiles
             scaleAnim.animateTo(
                 targetValue = 1.0f,
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = 3200f
+                    stiffness = 2800f
                 )
             )
             alphaAnim.animateTo(
                 targetValue = 1.0f,
-                animationSpec = spring(stiffness = 3200f)
+                animationSpec = spring(stiffness = 2800f)
             )
         } else {
-            // Keep at base state
             launch { scaleAnim.animateTo(1f) }
             launch { alphaAnim.animateTo(1f) }
         }
     }
 
-    val (backgroundColor, textColor) = getTileColors(tile.value)
+    val (backgroundColor, textColor) = getTileColors(tile.value, isDarkTheme)
 
     Box(
         modifier = Modifier
@@ -636,21 +639,21 @@ fun AnimatedTile(
             .clip(RoundedCornerShape(12.dp))
             .background(backgroundColor)
             .border(
-                width = if (tile.value >= 1024) 2.dp else if (tile.value == 0) 0.dp else 1.dp,
-                color = if (tile.value >= 1024) androidx.compose.material3.MaterialTheme.colorScheme.primary else if (tile.value == 0) Color.Transparent else Color.Black.copy(alpha = 0.15f),
+                width = if (tile.value >= 2048) 2.dp else if (tile.value >= 128) 1.dp else 0.dp,
+                color = if (tile.value >= 2048) Color(0xFFEDC22E) else if (tile.value >= 128) Color.White.copy(alpha = 0.35f) else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
             )
             .testTag("tile_${tile.row}_${tile.col}"),
         contentAlignment = Alignment.Center
     ) {
-        // Subtle top reflection for 3D effect
+        // Subtle top reflection highlight
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                    Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.25f),
+                            Color.White.copy(alpha = if (isDarkTheme) 0.12f else 0.22f),
                             Color.Transparent
                         )
                     )
@@ -660,11 +663,11 @@ fun AnimatedTile(
             text = tile.value.toString(),
             fontSize = when {
                 tile.value >= 10000 -> 18.sp
-                tile.value >= 1000 -> 22.sp
-                tile.value >= 100 -> 26.sp
-                else -> 32.sp
+                tile.value >= 1000 -> 21.sp
+                tile.value >= 100 -> 25.sp
+                else -> 30.sp
             },
-            fontWeight = FontWeight.Black,
+            fontWeight = FontWeight.ExtraBold,
             color = textColor,
             textAlign = TextAlign.Center
         )
@@ -674,11 +677,11 @@ fun AnimatedTile(
 @Composable
 fun GameCell(
     value: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isDarkTheme: Boolean = false
 ) {
-    val (backgroundColor, textColor) = getTileColors(value)
+    val (backgroundColor, textColor) = getTileColors(value, isDarkTheme)
 
-    // Bounce animation when cell loads with non-zero value
     val cellScale by animateFloatAsState(
         targetValue = if (value > 0) 1.0f else 0.95f,
         animationSpec = spring(
@@ -705,9 +708,9 @@ fun GameCell(
             Text(
                 text = value.toString(),
                 fontSize = when {
-                    value >= 1000 -> 22.sp
-                    value >= 100 -> 26.sp
-                    else -> 32.sp
+                    value >= 1000 -> 21.sp
+                    value >= 100 -> 25.sp
+                    else -> 30.sp
                 },
                 fontWeight = FontWeight.Bold,
                 fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
@@ -731,7 +734,7 @@ fun OverlayScreen(
     badgeColor: Color
 ) {
     Surface(
-        color = androidx.compose.material3.MaterialTheme.colorScheme.background.copy(alpha = 0.9f), // Translucent deep plum-charcoal overlay
+        color = androidx.compose.material3.MaterialTheme.colorScheme.background.copy(alpha = 0.92f),
         shape = RoundedCornerShape(18.dp),
         modifier = Modifier.fillMaxSize()
     ) {
@@ -843,10 +846,10 @@ fun SwipeableBox(
 
                             val absX = kotlin.math.abs(totalDragX)
                             val absY = kotlin.math.abs(totalDragY)
-                            val threshold = 55f // highly responsive activation threshold
+                            val threshold = 40f // highly responsive activation threshold
 
                             if (absX > threshold || absY > threshold) {
-                                hasSwipedInCurrentGesture = true // lock swipe until next touch down
+                                hasSwipedInCurrentGesture = true
                                 if (absX > absY) {
                                     if (totalDragX > 0) onSwipeRight() else onSwipeLeft()
                                 } else {
@@ -877,23 +880,43 @@ private fun borderStrokeForUndo(enabled: Boolean): androidx.compose.foundation.B
 }
 
 @Composable
-private fun getTileColors(value: Int): Pair<Color, Color> {
-    return when (value) {
-        0 -> Pair(androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant, Color.Transparent)
-        2 -> Pair(Color(0xFF1E88E5), Color.White)
-        4 -> Pair(Color(0xFF00ACC1), Color.White)
-        8 -> Pair(Color(0xFF00897B), Color.White)
-        16 -> Pair(Color(0xFF43A047), Color.White)
-        32 -> Pair(Color(0xFF7CB342), Color.White)
-        64 -> Pair(Color(0xFFC0CA33), Color.White)
-        128 -> Pair(Color(0xFFFDD835), Color(0xFF212529))
-        256 -> Pair(Color(0xFFFFB300), Color(0xFF212529))
-        512 -> Pair(Color(0xFFFB8C00), Color.White)
-        1024 -> Pair(Color(0xFFF4511E), Color.White)
-        2048 -> Pair(Color(0xFFE53935), Color.White)
-        4096 -> Pair(Color(0xFFD81B60), Color.White)
-        8192 -> Pair(Color(0xFF8E24AA), Color.White)
-        else -> Pair(Color(0xFF5E35B1), Color.White)
+private fun getTileColors(value: Int, isDarkTheme: Boolean = false): Pair<Color, Color> {
+    return if (!isDarkTheme) {
+        when (value) {
+            0 -> Pair(Color(0xFFE2E8F0), Color.Transparent)
+            2 -> Pair(Color(0xFFEEE4DA), Color(0xFF776E65))
+            4 -> Pair(Color(0xFFEDE0C8), Color(0xFF776E65))
+            8 -> Pair(Color(0xFFF2B179), Color(0xFFF9F6F2))
+            16 -> Pair(Color(0xFFF59563), Color(0xFFF9F6F2))
+            32 -> Pair(Color(0xFFF67C5F), Color(0xFFF9F6F2))
+            64 -> Pair(Color(0xFFF65E3B), Color(0xFFF9F6F2))
+            128 -> Pair(Color(0xFFEDCF72), Color(0xFFF9F6F2))
+            256 -> Pair(Color(0xFFEDCC61), Color(0xFFF9F6F2))
+            512 -> Pair(Color(0xFFEDC850), Color(0xFFF9F6F2))
+            1024 -> Pair(Color(0xFFEDC53F), Color(0xFFF9F6F2))
+            2048 -> Pair(Color(0xFFEDC22E), Color(0xFFF9F6F2))
+            4096 -> Pair(Color(0xFF3C3A32), Color(0xFFF9F6F2))
+            8192 -> Pair(Color(0xFF24231E), Color(0xFFF9F6F2))
+            else -> Pair(Color(0xFF0F172A), Color(0xFFF9F6F2))
+        }
+    } else {
+        when (value) {
+            0 -> Pair(Color(0xFF21262D), Color.Transparent)
+            2 -> Pair(Color(0xFF3E3836), Color(0xFFEEE4DA))
+            4 -> Pair(Color(0xFF4A423E), Color(0xFFEDE0C8))
+            8 -> Pair(Color(0xFFB85C2A), Color(0xFFF9F6F2))
+            16 -> Pair(Color(0xFFC84E29), Color(0xFFF9F6F2))
+            32 -> Pair(Color(0xFFD23B22), Color(0xFFF9F6F2))
+            64 -> Pair(Color(0xFFE42B1C), Color(0xFFF9F6F2))
+            128 -> Pair(Color(0xFFA38321), Color(0xFFF9F6F2))
+            256 -> Pair(Color(0xFFA88118), Color(0xFFF9F6F2))
+            512 -> Pair(Color(0xFFB07C10), Color(0xFFF9F6F2))
+            1024 -> Pair(Color(0xFFB87508), Color(0xFFF9F6F2))
+            2048 -> Pair(Color(0xFFD18600), Color(0xFFF9F6F2))
+            4096 -> Pair(Color(0xFF1C1B17), Color(0xFFF9F6F2))
+            8192 -> Pair(Color(0xFF12110F), Color(0xFFF9F6F2))
+            else -> Pair(Color(0xFF0A0C10), Color(0xFFF9F6F2))
+        }
     }
 }
 

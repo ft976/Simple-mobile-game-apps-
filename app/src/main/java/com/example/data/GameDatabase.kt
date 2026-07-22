@@ -19,7 +19,8 @@ data class GameSessionEntity(
     val isGameOver: Boolean,
     val hasWon: Boolean,
     val canKeepPlaying: Boolean,
-    val historyJson: String // Serialized undo history
+    val historyJson: String,
+    val moveCount: Int = 0
 )
 
 @Dao

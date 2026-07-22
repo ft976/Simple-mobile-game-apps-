@@ -26,6 +26,8 @@ data class GameUiState(
     val tiles: List<Tile> = emptyList(),
     val score: Int = 0,
     val highScore: Int = 0,
+    val moveCount: Int = 0,
+    val scoreDelta: Int = 0,
     val isGameOver: Boolean = false,
     val hasWon: Boolean = false,
     val canKeepPlaying: Boolean = false,
@@ -35,7 +37,8 @@ data class GameUiState(
 
 data class GameHistorySnapshot(
     val grid: List<List<Int>>,
-    val score: Int
+    val score: Int,
+    val moveCount: Int
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -54,13 +57,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val savedSession = repository.getSessionFlow().firstOrNull()
             if (savedSession != null) {
                 val grid = csvToGrid(savedSession.gridCsv)
-                tileIdCounter = 100 // Safe start index for loaded sessions
+                tileIdCounter = 1000 // Safe start index for loaded sessions
                 val tiles = tilesFromGrid(grid)
                 _uiState.value = GameUiState(
                     grid = grid,
                     tiles = tiles,
                     score = savedSession.score,
                     highScore = savedSession.highScore,
+                    moveCount = savedSession.moveCount,
                     isGameOver = savedSession.isGameOver,
                     hasWon = savedSession.hasWon,
                     canKeepPlaying = savedSession.canKeepPlaying,
@@ -85,6 +89,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             tiles = finalTiles,
             score = 0,
             highScore = _uiState.value.highScore, // Retain high score across games
+            moveCount = 0,
+            scoreDelta = 0,
             isGameOver = false,
             hasWon = false,
             canKeepPlaying = false,
@@ -96,7 +102,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun move(direction: SwipeDirection) {
         val currentState = _uiState.value
-        // If game is over, or user won but hasn't dismissed the win screen (by selecting Keep Playing)
         if (currentState.isGameOver || (currentState.hasWon && !currentState.canKeepPlaying && has2048(currentState.grid))) return
 
         val currentTiles = currentState.tiles.filter { !it.toRemove }
@@ -104,14 +109,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         if (hasMoved) {
             val newHistory = currentState.undoHistory.toMutableList().apply {
-                add(GameHistorySnapshot(currentState.grid, currentState.score))
-                if (size > 15) removeAt(0) // Limit memory size to last 15 actions
+                add(GameHistorySnapshot(currentState.grid, currentState.score, currentState.moveCount))
+                if (size > 20) removeAt(0) // Keep last 20 undo snapshots
             }
 
             val finalTiles = spawnRandomTile(movedTiles)
             val finalGrid = generateGridFromTiles(finalTiles)
 
-            // Check for new highest value in merged
             var maxTile = 0
             for (tile in finalTiles) {
                 if (!tile.toRemove && tile.value > maxTile) {
@@ -121,11 +125,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             val newScore = currentState.score + scoreGained
             val newHighScore = maxOf(currentState.highScore, newScore)
+            val newMoveCount = currentState.moveCount + 1
 
-            // Check if game is over
             val gameOver = isGameOver(finalGrid)
-
-            // Check if user hit 2048 for the first time
             val wonNow = maxTile >= 2048
             val previouslyWon = currentState.hasWon
             val showWinScreen = wonNow && !previouslyWon
@@ -135,9 +137,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 tiles = finalTiles,
                 score = newScore,
                 highScore = newHighScore,
+                moveCount = newMoveCount,
+                scoreDelta = scoreGained,
                 isGameOver = gameOver,
                 hasWon = previouslyWon || wonNow,
-                // If they just hit 2048, prompt them; otherwise keep playing
                 canKeepPlaying = currentState.canKeepPlaying || !showWinScreen,
                 undoHistory = newHistory
             )
@@ -159,6 +162,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             grid = lastSnapshot.grid,
             tiles = restoredTiles,
             score = lastSnapshot.score,
+            moveCount = lastSnapshot.moveCount,
+            scoreDelta = 0,
             isGameOver = false,
             hasWon = has2048(lastSnapshot.grid),
             undoHistory = history
@@ -183,7 +188,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     isGameOver = state.isGameOver,
                     hasWon = state.hasWon,
                     canKeepPlaying = state.canKeepPlaying,
-                    historyJson = serializeHistory(state.undoHistory)
+                    historyJson = serializeHistory(state.undoHistory),
+                    moveCount = state.moveCount
                 )
             )
         }
@@ -217,7 +223,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
-    // Custom text-based serialization
     private fun gridToCsv(grid: List<List<Int>>): String = grid.flatten().joinToString(",")
 
     private fun csvToGrid(csv: String): List<List<Int>> {
@@ -232,7 +237,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun serializeHistory(history: List<GameHistorySnapshot>): String {
         return history.joinToString(";") { snapshot ->
-            "${gridToCsv(snapshot.grid)}|${snapshot.score}"
+            "${gridToCsv(snapshot.grid)}|${snapshot.score}|${snapshot.moveCount}"
         }
     }
 
@@ -240,15 +245,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (serialized.isEmpty()) return emptyList()
         return serialized.split(";").mapNotNull { item ->
             val parts = item.split("|")
-            if (parts.size == 2) {
+            if (parts.size >= 2) {
                 val grid = csvToGrid(parts[0])
                 val score = parts[1].toIntOrNull() ?: 0
-                GameHistorySnapshot(grid, score)
+                val moveCount = if (parts.size >= 3) parts[2].toIntOrNull() ?: 0 else 0
+                GameHistorySnapshot(grid, score, moveCount)
             } else null
         }
     }
 
-    // Tile-based support functions
     private fun tilesFromGrid(grid: List<List<Int>>): List<Tile> {
         val list = mutableListOf<Tile>()
         for (r in 0..3) {
@@ -296,117 +301,60 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val movedTiles = mutableListOf<Tile>()
         var totalScoreGained = 0
 
-        when (direction) {
-            SwipeDirection.LEFT -> {
-                for (r in 0..3) {
-                    val rowTiles = activeTiles.filter { it.row == r }.sortedBy { it.col }
-                    var targetCol = 0
-                    var i = 0
-                    while (i < rowTiles.size) {
-                        val current = rowTiles[i]
-                        if (i + 1 < rowTiles.size && rowTiles[i].value == rowTiles[i+1].value) {
-                            val next = rowTiles[i+1]
-                            val mergedValue = current.value * 2
-                            totalScoreGained += mergedValue
-
-                            val movedCurrent = current.copy(row = r, col = targetCol, value = mergedValue, isMerged = true)
-                            val movedNext = next.copy(row = r, col = targetCol, toRemove = true)
-                            movedTiles.add(movedCurrent)
-                            movedTiles.add(movedNext)
-
-                            i += 2
-                            targetCol += 1
-                        } else {
-                            val movedCurrent = current.copy(row = r, col = targetCol, isMerged = false)
-                            movedTiles.add(movedCurrent)
-                            i += 1
-                            targetCol += 1
-                        }
-                    }
-                }
+        for (lineIdx in 0..3) {
+            val lineTiles = when (direction) {
+                SwipeDirection.LEFT -> activeTiles.filter { it.row == lineIdx }.sortedBy { it.col }
+                SwipeDirection.RIGHT -> activeTiles.filter { it.row == lineIdx }.sortedByDescending { it.col }
+                SwipeDirection.UP -> activeTiles.filter { it.col == lineIdx }.sortedBy { it.row }
+                SwipeDirection.DOWN -> activeTiles.filter { it.col == lineIdx }.sortedByDescending { it.row }
             }
-            SwipeDirection.RIGHT -> {
-                for (r in 0..3) {
-                    val rowTiles = activeTiles.filter { it.row == r }.sortedByDescending { it.col }
-                    var targetCol = 3
-                    var i = 0
-                    while (i < rowTiles.size) {
-                        val current = rowTiles[i]
-                        if (i + 1 < rowTiles.size && rowTiles[i].value == rowTiles[i+1].value) {
-                            val next = rowTiles[i+1]
-                            val mergedValue = current.value * 2
-                            totalScoreGained += mergedValue
 
-                            val movedCurrent = current.copy(row = r, col = targetCol, value = mergedValue, isMerged = true)
-                            val movedNext = next.copy(row = r, col = targetCol, toRemove = true)
-                            movedTiles.add(movedCurrent)
-                            movedTiles.add(movedNext)
+            var targetPos = 0
+            var i = 0
+            while (i < lineTiles.size) {
+                val current = lineTiles[i]
+                if (i + 1 < lineTiles.size && current.value == lineTiles[i + 1].value) {
+                    val next = lineTiles[i + 1]
+                    val mergedValue = current.value * 2
+                    totalScoreGained += mergedValue
 
-                            i += 2
-                            targetCol -= 1
-                        } else {
-                            val movedCurrent = current.copy(row = r, col = targetCol, isMerged = false)
-                            movedTiles.add(movedCurrent)
-                            i += 1
-                            targetCol -= 1
-                        }
-                    }
-                }
-            }
-            SwipeDirection.UP -> {
-                for (c in 0..3) {
-                    val colTiles = activeTiles.filter { it.col == c }.sortedBy { it.row }
-                    var targetRow = 0
-                    var i = 0
-                    while (i < colTiles.size) {
-                        val current = colTiles[i]
-                        if (i + 1 < colTiles.size && colTiles[i].value == colTiles[i+1].value) {
-                            val next = colTiles[i+1]
-                            val mergedValue = current.value * 2
-                            totalScoreGained += mergedValue
+                    val (targetRow, targetCol) = getPosition(lineIdx, targetPos, direction)
 
-                            val movedCurrent = current.copy(row = targetRow, col = c, value = mergedValue, isMerged = true)
-                            val movedNext = next.copy(row = targetRow, col = c, toRemove = true)
-                            movedTiles.add(movedCurrent)
-                            movedTiles.add(movedNext)
+                    val movedCurrent = current.copy(
+                        row = targetRow,
+                        col = targetCol,
+                        value = mergedValue,
+                        isMerged = true,
+                        isNew = false,
+                        toRemove = false
+                    )
+                    val movedNext = next.copy(
+                        row = targetRow,
+                        col = targetCol,
+                        value = next.value,
+                        isMerged = false,
+                        isNew = false,
+                        toRemove = true
+                    )
+                    movedTiles.add(movedCurrent)
+                    movedTiles.add(movedNext)
 
-                            i += 2
-                            targetRow += 1
-                        } else {
-                            val movedCurrent = current.copy(row = targetRow, col = c, isMerged = false)
-                            movedTiles.add(movedCurrent)
-                            i += 1
-                            targetRow += 1
-                        }
-                    }
-                }
-            }
-            SwipeDirection.DOWN -> {
-                for (c in 0..3) {
-                    val colTiles = activeTiles.filter { it.col == c }.sortedByDescending { it.row }
-                    var targetRow = 3
-                    var i = 0
-                    while (i < colTiles.size) {
-                        val current = colTiles[i]
-                        if (i + 1 < colTiles.size && colTiles[i].value == colTiles[i+1].value) {
-                            val next = colTiles[i+1]
-                            val mergedValue = current.value * 2
-                            totalScoreGained += mergedValue
+                    i += 2
+                    targetPos += 1
+                } else {
+                    val (targetRow, targetCol) = getPosition(lineIdx, targetPos, direction)
 
-                            val movedCurrent = current.copy(row = targetRow, col = c, value = mergedValue, isMerged = true)
-                            val movedNext = next.copy(row = targetRow, col = c, toRemove = true)
-                            movedTiles.add(movedCurrent)
-                            movedTiles.add(movedNext)
+                    val movedCurrent = current.copy(
+                        row = targetRow,
+                        col = targetCol,
+                        isMerged = false,
+                        isNew = false,
+                        toRemove = false
+                    )
+                    movedTiles.add(movedCurrent)
 
-                            i += 2
-                            targetRow -= 1
-                        } else {
-                            val movedCurrent = current.copy(row = targetRow, col = c, isMerged = false)
-                            movedTiles.add(movedCurrent)
-                            i += 1
-                            targetRow -= 1
-                        }
-                    }
+                    i += 1
+                    targetPos += 1
                 }
             }
         }
@@ -415,13 +363,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         for (tile in movedTiles) {
             val original = activeTiles.find { it.id == tile.id }
             if (original != null) {
-                if (original.row != tile.row || original.col != tile.col || tile.toRemove || tile.isMerged) {
+                if (original.row != tile.row || original.col != tile.col || tile.isMerged || tile.toRemove) {
                     hasMovedAny = true
+                    break
                 }
             }
         }
 
         return Triple(movedTiles, totalScoreGained, hasMovedAny)
+    }
+
+    private fun getPosition(lineIndex: Int, pos: Int, direction: SwipeDirection): Pair<Int, Int> {
+        return when (direction) {
+            SwipeDirection.LEFT -> Pair(lineIndex, pos)
+            SwipeDirection.RIGHT -> Pair(lineIndex, 3 - pos)
+            SwipeDirection.UP -> Pair(pos, lineIndex)
+            SwipeDirection.DOWN -> Pair(3 - pos, lineIndex)
+        }
     }
 }
 

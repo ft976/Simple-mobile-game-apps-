@@ -35,7 +35,7 @@ interface GameDao {
     suspend fun clearSession()
 }
 
-@Database(entities = [GameSessionEntity::class], version = 1, exportSchema = false)
+@Database(entities = [GameSessionEntity::class], version = 2, exportSchema = false)
 abstract class GameDatabase : RoomDatabase() {
     abstract fun gameDao(): GameDao
 }

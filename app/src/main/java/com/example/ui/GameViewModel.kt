@@ -54,24 +54,28 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadSavedSession() {
         viewModelScope.launch {
-            val savedSession = repository.getSessionFlow().firstOrNull()
-            if (savedSession != null) {
-                val grid = csvToGrid(savedSession.gridCsv)
-                tileIdCounter = 1000 // Safe start index for loaded sessions
-                val tiles = tilesFromGrid(grid)
-                _uiState.value = GameUiState(
-                    grid = grid,
-                    tiles = tiles,
-                    score = savedSession.score,
-                    highScore = savedSession.highScore,
-                    moveCount = savedSession.moveCount,
-                    isGameOver = savedSession.isGameOver,
-                    hasWon = savedSession.hasWon,
-                    canKeepPlaying = savedSession.canKeepPlaying,
-                    undoHistory = deserializeHistory(savedSession.historyJson),
-                    isLoading = false
-                )
-            } else {
+            try {
+                val savedSession = repository.getSessionFlow().firstOrNull()
+                if (savedSession != null) {
+                    val grid = csvToGrid(savedSession.gridCsv)
+                    tileIdCounter = 1000 // Safe start index for loaded sessions
+                    val tiles = tilesFromGrid(grid)
+                    _uiState.value = GameUiState(
+                        grid = grid,
+                        tiles = tiles,
+                        score = savedSession.score,
+                        highScore = savedSession.highScore,
+                        moveCount = savedSession.moveCount,
+                        isGameOver = savedSession.isGameOver,
+                        hasWon = savedSession.hasWon,
+                        canKeepPlaying = savedSession.canKeepPlaying,
+                        undoHistory = deserializeHistory(savedSession.historyJson),
+                        isLoading = false
+                    )
+                } else {
+                    startNewGame()
+                }
+            } catch (e: Exception) {
                 startNewGame()
             }
         }
@@ -180,18 +184,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun saveCurrentSession() {
         val state = _uiState.value
         viewModelScope.launch {
-            repository.saveSession(
-                GameSessionEntity(
-                    gridCsv = gridToCsv(state.grid),
-                    score = state.score,
-                    highScore = state.highScore,
-                    isGameOver = state.isGameOver,
-                    hasWon = state.hasWon,
-                    canKeepPlaying = state.canKeepPlaying,
-                    historyJson = serializeHistory(state.undoHistory),
-                    moveCount = state.moveCount
+            try {
+                repository.saveSession(
+                    GameSessionEntity(
+                        gridCsv = gridToCsv(state.grid),
+                        score = state.score,
+                        highScore = state.highScore,
+                        isGameOver = state.isGameOver,
+                        hasWon = state.hasWon,
+                        canKeepPlaying = state.canKeepPlaying,
+                        historyJson = serializeHistory(state.undoHistory),
+                        moveCount = state.moveCount
+                    )
                 )
-            )
+            } catch (e: Exception) {
+                // Silently handle save failure
+            }
         }
     }
 
@@ -290,7 +298,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (emptyPositions.isEmpty()) return tiles
 
         val (row, col) = emptyPositions.random()
-        val value = if (Math.random() < 0.9) 2 else 4
+        val value = if (Math.random() < 0.6) 2 else 4
         val newTile = Tile(id = tileIdCounter++, value = value, row = row, col = col, isNew = true)
 
         return tiles + newTile

@@ -1006,93 +1006,20 @@ fun HomeScreen(
                 )
             }
 
-            // Beautiful Hero Arcade Banner Image Card
-            Card(
+            // Direct Hero Arcade Poster Image on the Page
+            Image(
+                painter = painterResource(id = R.drawable.img_arcade_banner_1783502198486),
+                contentDescription = "Arcade Lounge Poster",
+                contentScale = ContentScale.FillWidth,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(135.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                border = BorderStroke(2.dp, androidx.compose.material3.MaterialTheme.colorScheme.primary)
-            ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    Image(
-                        painter = painterResource(id = R.drawable.img_arcade_banner_1783502198486),
-                        contentDescription = "Arcade Lounge Hero Banner",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(
+                        width = 1.dp,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(16.dp)
                     )
-                    
-                    // Dark ambient overlay with soft radial/linear gradient
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color(0x2216121B),
-                                        Color(0xAA16121B)
-                                    )
-                                )
-                            )
-                    )
-                    
-                    // Floating Mascot
-                    Image(
-                        painter = painterResource(id = R.drawable.arcade_mascot_1783521321124),
-                        contentDescription = "Floating Mascot",
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 10.dp, end = 20.dp)
-                            .size(90.dp)
-                            .offset(y = mascotFloatY.dp)
-                            .graphicsLayer {
-                                rotationZ = 5f
-                            }
-                    )
-                    
-                    // Banner Sticker Badges overlay
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = "Lounge Arcade Room",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Slide. Match. Control. Win!",
-                                fontSize = 11.sp,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.tertiary,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                        }
-                        
-                        // Sticker-like glowing badge
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(androidx.compose.material3.MaterialTheme.colorScheme.tertiary)
-                                .border(1.5.dp, Color.White, RoundedCornerShape(10.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "⭐ PLAY NOW",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Black,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onTertiary
-                            )
-                        }
-                    }
-                }
-            }
+            )
 
             // Game Selection List Heading
             Text(
